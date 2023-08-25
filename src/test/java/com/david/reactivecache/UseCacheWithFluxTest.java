@@ -31,18 +31,19 @@ public class UseCacheWithFluxTest {
 
         String requestId = UUID.randomUUID().toString();
 
-        Flux<Integer> daFlux = Flux.just(1, 2, 1, 2, 1)
-                .map(val -> {
-                    System.out.println("VAL IS " + val);
-                    return val;
-                })
-                .flatMap(this::process)
-                // when the flux is finished - remove this flux from context.
-                .doOnComplete(() -> cache.remove(requestId))
+        Flux<Integer> daFlux = Flux.deferContextual(ctx ->
+                        Flux.just(1, 2, 1, 2, 1)
+                                .map(val -> {
+                                    System.out.println("VAL IS " + val);
+                                    return val;
+                                })
+                                .flatMap(this::process)
+                                // when the flux is finished - remove this flux from context.
+                                .doOnComplete(() -> cache.remove(ctx.get(CACHE_KEY_ID)))
+                )
                 // when we start subscribing, give this flux pipeline a request id in the context
                 // we cannot update the context during the Flux pipeline, but we can use an external cache object.
-                .contextWrite(ctx ->
-                        ctx.put(CACHE_KEY_ID, requestId));
+                .contextWrite(ctx -> ctx.put(CACHE_KEY_ID, requestId));
 
         StepVerifier.create(daFlux)
                 .expectNext(2)
